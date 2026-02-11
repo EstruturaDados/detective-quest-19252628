@@ -2,103 +2,139 @@
 #include <stdlib.h>
 #include <string.h>
 
-// Estrutura para os Nos da Arvore de Pistas (BST)
+#define TAM_HASH 10
+
+// Estruturas do Jogo
 typedef struct PistaNode {
     char conteudo[50];
     struct PistaNode *esq, *dir;
 } PistaNode;
 
-// Estrutura para os Comodos da Mansao (Arvore Binaria)
+typedef struct HashNode {
+    char pista[50];
+    char suspeito[50];
+    struct HashNode *proximo;
+} HashNode;
+
 typedef struct Sala {
     char nome[50];
-    char pista[50]; // Conteudo da pista no comodo
-    struct Sala *esquerda;
-    struct Sala *direita;
+    char pista[50];
+    struct Sala *esquerda, *direita;
 } Sala;
 
-// Funcao para criar um novo no na arvore de pistas (BST)
-PistaNode* inserirPista(PistaNode* raiz, char* texto) {
+// --- FUNCOES DE TABELA HASH ---
+int gerarHash(char *str) {
+    int hash = 0;
+    for (int i = 0; str[i] != '\0'; i++) hash += str[i];
+    return hash % TAM_HASH;
+}
+
+// inserirNaHash() – insere associação pista/suspeito
+void inserirNaHash(HashNode *tabela[], char *pista, char *suspeito) {
+    int indice = gerarHash(pista);
+    HashNode *novo = (HashNode*)malloc(sizeof(HashNode));
+    strcpy(novo->pista, pista);
+    strcpy(novo->suspeito, suspeito);
+    novo->proximo = tabela[indice];
+    tabela[indice] = novo;
+}
+
+// encontrarSuspeito() – consulta o suspeito de uma pista
+char* encontrarSuspeito(HashNode *tabela[], char *pista) {
+    int indice = gerarHash(pista);
+    HashNode *atual = tabela[indice];
+    while (atual != NULL) {
+        if (strcmp(atual->pista, pista) == 0) return atual->suspeito;
+        atual = atual->proximo;
+    }
+    return "Desconhecido";
+}
+
+// --- FUNCOES DE ARVORE BST (PISTAS) ---
+PistaNode* inserirPista(PistaNode *raiz, char *texto) {
     if (raiz == NULL) {
-        PistaNode* novo = (PistaNode*)malloc(sizeof(PistaNode));
+        PistaNode *novo = (PistaNode*)malloc(sizeof(PistaNode));
         strcpy(novo->conteudo, texto);
         novo->esq = novo->dir = NULL;
         return novo;
     }
-    // Organiza por ordem alfabetica
-    if (strcmp(texto, raiz->conteudo) < 0)
-        raiz->esq = inserirPista(raiz->esq, texto);
-    else
-        raiz->dir = inserirPista(raiz->dir, texto);
+    if (strcmp(texto, raiz->conteudo) < 0) raiz->esq = inserirPista(raiz->esq, texto);
+    else raiz->dir = inserirPista(raiz->dir, texto);
     return raiz;
 }
 
-// Funcao para criar sala com ou sem pista
-Sala* criarSala(char* nome, char* pista) {
-    Sala* nova = (Sala*)malloc(sizeof(Sala));
+// --- FUNCOES DA MANSÃO ---
+Sala* criarSala(char *nome, char *pista) {
+    Sala *nova = (Sala*)malloc(sizeof(Sala));
     strcpy(nova->nome, nome);
     strcpy(nova->pista, pista);
     nova->esquerda = nova->direita = NULL;
     return nova;
 }
 
-// Exibe as pistas em ordem alfabetica (Percurso Em-ordem)
-void exibirPistas(PistaNode* raiz) {
-    if (raiz != NULL) {
-        exibirPistas(raiz->esq);
-        printf("- %s\n", raiz->conteudo);
-        exibirPistas(raiz->dir);
+// --- LOGICA DE JULGAMENTO ---
+void verificarSuspeitoFinal(PistaNode *inventario, HashNode *tabela[]) {
+    char acusacao[50];
+    int provas = 0;
+
+    printf("\n--- HORA DA ACUSACAO ---");
+    printf("\nQuem e o culpado? (Suspeitos: Mordomo, Cozinheira, Jardineiro): ");
+    scanf(" %[^\n]s", acusacao);
+
+    // Funcao auxiliar para contar provas na BST
+    void contarProvas(PistaNode *n) {
+        if (n == NULL) return;
+        contarProvas(n->esq);
+        if (strcmp(encontrarSuspeito(tabela, n->conteudo), acusacao) == 0) provas++;
+        contarProvas(n->dir);
     }
-}
+    
+    contarProvas(inventario);
 
-// Controla a navegacao e coleta automatica
-void explorarSalasComPistas(Sala* raiz) {
-    Sala* atual = raiz;
-    PistaNode* inventario = NULL;
-    char escolha;
-
-    printf("\n--- INVESTIGACAO DA ENIGMA STUDIOS ---\n");
-
-    while (atual != NULL) {
-        printf("\nVoce esta na: %s", atual->nome);
-
-        // Coleta automatica se houver pista
-        if (strlen(atual->pista) > 0) {
-            printf("\n[!] Pista encontrada: %s", atual->pista);
-            inventario = inserirPista(inventario, atual->pista);
-            strcpy(atual->pista, ""); // Limpa para nao coletar repetido
-        }
-
-        printf("\nEscolha: [e] Esquerda, [d] Direita, [s] Sair: ");
-        scanf(" %c", &escolha);
-
-        if (escolha == 's') break;
-        if (escolha == 'e' && atual->esquerda) atual = atual->esquerda;
-        else if (escolha == 'd' && atual->direita) atual = atual->direita;
-        else printf("\nCaminho sem saida ou opcao invalida!");
+    if (provas >= 2) {
+        printf("\nPARABENS! Com %d pistas, voce provou que %s e o culpado!\n", provas, acusacao);
+    } else {
+        printf("\nFRACASSO... Voce nao tem provas suficientes contra %s.\n", acusacao);
     }
-
-    printf("\n--- RELATORIO FINAL DE PISTAS (ORDEM ALFABETICA) ---\n");
-    if (inventario == NULL) printf("Nenhuma pista coletada.\n");
-    else exibirPistas(inventario);
 }
 
 int main() {
-    // Montagem do mapa fixo
-    Sala* hall = criarSala("Hall de Entrada", "");
-    Sala* biblioteca = criarSala("Biblioteca", "Diario Antigo");
-    Sala* jardim = criarSala("Jardim", "Pegada na Lama");
-    Sala* cozinha = criarSala("Cozinha", "Chave de Prata");
-    Sala* adega = criarSala("Adega", "Bilhete Rasgado");
+    HashNode *dossie[TAM_HASH] = {NULL};
+    PistaNode *inventario = NULL;
+    
+    // Configura Suspeitos na Hash
+    inserirNaHash(dossie, "Veneno", "Cozinheira");
+    inserirNaHash(dossie, "Faca", "Cozinheira");
+    inserirNaHash(dossie, "Luvas", "Mordomo");
+    inserirNaHash(dossie, "Chave", "Mordomo");
 
-    hall->esquerda = biblioteca;
-    hall->direita = cozinha;
-    biblioteca->esquerda = jardim;
-    cozinha->direita = adega;
+    // Monta Mansao
+    Sala *hall = criarSala("Hall", "");
+    Sala *cozinha = criarSala("Cozinha", "Veneno");
+    Sala *despensa = criarSala("Despensa", "Faca");
+    hall->esquerda = cozinha;
+    cozinha->direita = despensa;
 
-    explorarSalasComPistas(hall);
+    // ExplorarSalas() - Navegação
+    Sala *atual = hall;
+    char escolha;
+    while (atual) {
+        printf("\nSala: %s", atual->nome);
+        if (strlen(atual->pista) > 0) {
+            printf("\n[!] Pista: %s", atual->pista);
+            inventario = inserirPista(inventario, atual->pista);
+            strcpy(atual->pista, "");
+        }
+        printf("\n[e]Esq [d]Dir [s]Sair: ");
+        scanf(" %c", &escolha);
+        if (escolha == 's') break;
+        atual = (escolha == 'e') ? atual->esquerda : atual->direita;
+    }
 
+    verificarSuspeitoFinal(inventario, dossie);
     return 0;
 }
+
 
 
 
